@@ -18,14 +18,30 @@ class AdListView(OwnerListView):
     template_name = "ads/ad_list.html"
 
     def get(self, request) :
-        ad_list = Ad.objects.all()
+        ads_list = Ad.objects.all()
         strval =  request.GET.get("search", False)
+        if strval :
+            # Simple title-only search
+            # objects = Post.objects.filter(title__contains=strval).select_related().order_by('-updated_at')[:10]
+            # Multi-field search
+            # __icontains for case-insensitive search
+            query = Q(title__icontains=strval)
+            query.add(Q(text__icontains=strval), Q.OR)
+            ads_list = Ad.objects.filter(query).select_related().order_by('-updated_at')[:10]
+        else :
+            ads_list = Ad.objects.all().order_by('-updated_at')[:10]
+            # rows = [{'id': 2}, {'id': 4} ... ]  (A list of rows)
+
         favorites = list()
         if request.user.is_authenticated:
             rows = request.user.favorite_ads.values('id')
+            # favorites = [2, 4, ...] using list comprehension
             favorites = [ row['id'] for row in rows ]
-            ctx = {'ad_list' : ad_list, 'favorites': favorites}
-            return render(request, self.template_name, ctx)
+            for obj in ads_list:
+                obj.natural_updated = naturaltime(obj.updated_at)
+                ctx = {'ad_list' : ads_list, 'favorites': favorites, 'search': strval}
+                return render(request, self.template_name, ctx)
+
         return render(request, self.template_name,)
     # By convention:
     # template_name = "ads/ad_list.html"
@@ -43,6 +59,7 @@ class AdDetailView(OwnerDetailView):
 
 class AdCreateView(LoginRequiredMixin, View):
     model = Ad
+    fields = ['title', 'text', 'tags']
     template_name = 'ads/ad_form.html'
     success_url = reverse_lazy('ads:all')
 
@@ -68,6 +85,7 @@ class AdCreateView(LoginRequiredMixin, View):
 
 class AdUpdateView(LoginRequiredMixin, View):
     model = Ad
+    fields = ['title', 'text', 'tags']
     template_name = 'ads/ad_form.html'
     success_url = reverse_lazy('ads:all')
 
